@@ -16,6 +16,14 @@ root.title("Game")
 canvas = tk.Canvas(root, width=width, height=height, bg="white")
 canvas.pack()
 
+# color schemes - one per checkpoint
+colorSchemes = [
+    {"bg": "white",  "fg": "black", "progressBg": "gray",    "invertBg": "black",  "invertFg": "white", "invertProgressBg": "gray25"},
+    {"bg": "black",  "fg": "white", "progressBg": "gray25",  "invertBg": "white",  "invertFg": "black", "invertProgressBg": "gray"},
+    {"bg": "navy",   "fg": "cyan",  "progressBg": "blue",    "invertBg": "cyan",   "invertFg": "navy",  "invertProgressBg": "teal"},
+    {"bg": "red",    "fg": "white", "progressBg": "darkred", "invertBg": "white",  "invertFg": "red",   "invertProgressBg": "pink"},
+]
+
 # player variables
 pX = width//2.15
 pY = height//2
@@ -43,6 +51,10 @@ dashSpeed = width//32
 dashCooldown = 0
 dashCooldownMax = 60
 
+# slam variables
+slamming = False
+slamGravity = 100
+
 # laser variables
 lasers = []
 laserSpawnTimer = 0
@@ -53,13 +65,9 @@ gameOver = False
 
 # progress / difficulty variables
 progress = 0
-progressMax = 600
+progressMax = 300
 checkpoint = 0
 maxCheckpoints = 3
-
-#slam variables
-slamming = False
-slamGravity = 20
 
 def create_rounded_rectangle(canvas, x1, y1, x2, y2, radius=25, **kwargs):
     points = [
@@ -81,12 +89,29 @@ def create_rounded_rectangle(canvas, x1, y1, x2, y2, radius=25, **kwargs):
 # draw floor, roof, progress bar and player
 floor = canvas.create_rectangle(0, ground, width, height, fill="black")
 roof = canvas.create_rectangle(0, 0, width, ceiling, fill="black")
-progressBarBg = canvas.create_rectangle(0, ceiling, width, ceiling + height * 0.02, fill="gray")
-progressBar = canvas.create_rectangle(0, ceiling, 0, ceiling + height * 0.02, fill="black")
+progressBarBg = canvas.create_rectangle(0, 0, width, height * 0.01, fill="gray")
+progressBar = canvas.create_rectangle(0, 0, 0, height * 0.01, fill="black")
 player = create_rounded_rectangle(canvas, pX, pY, pX + pWidth, pY + pHeight, cornerRad, fill="black", state="hidden")
 
 # track which keys are currently held down
 keys_held = set()
+
+def get_scheme():
+    return colorSchemes[min(checkpoint, len(colorSchemes) - 1)]
+
+def apply_color_scheme(scheme, flipped=False):
+    bg = scheme["invertBg"] if flipped else scheme["bg"]
+    fg = scheme["invertFg"] if flipped else scheme["fg"]
+    pbg = scheme["invertProgressBg"] if flipped else scheme["progressBg"]
+    canvas.config(bg=bg)
+    canvas.itemconfig(player, fill=fg)
+    canvas.itemconfig(floor, fill=fg)
+    canvas.itemconfig(roof, fill=fg)
+    canvas.itemconfig(progressBar, fill=fg)
+    canvas.itemconfig(progressBarBg, fill=pbg)
+    for laser in lasers:
+        canvas.itemconfig(laser["warning"], fill=fg)
+        canvas.itemconfig(laser["beam"], fill=fg)
 
 def key_press(event):
     global jumpBuffer, gravityFlipped, shakeFrames, velocityY, dashing, dashFrames, dashCooldown, slamming
@@ -103,41 +128,29 @@ def key_press(event):
         gravityFlipped = not gravityFlipped
         velocityY = 0
         shakeFrames = 15
-        if gravityFlipped:
-            canvas.config(bg="black")
-            canvas.itemconfig(player, fill="white")
-            canvas.itemconfig(floor, fill="white")
-            canvas.itemconfig(roof, fill="white")
-            canvas.itemconfig(progressBar, fill="white")
-            canvas.itemconfig(progressBarBg, fill="gray25")
-            for laser in lasers:
-                canvas.itemconfig(laser["warning"], fill="white")
-                canvas.itemconfig(laser["beam"], fill="white")
-        else:
-            canvas.config(bg="white")
-            canvas.itemconfig(player, fill="black")
-            canvas.itemconfig(floor, fill="black")
-            canvas.itemconfig(roof, fill="black")
-            canvas.itemconfig(progressBar, fill="black")
-            canvas.itemconfig(progressBarBg, fill="gray")
-            for laser in lasers:
-                canvas.itemconfig(laser["warning"], fill="black")
-                canvas.itemconfig(laser["beam"], fill="black")
+        apply_color_scheme(get_scheme(), flipped=gravityFlipped)
 
 def key_release(event):
     keys_held.discard(event.keysym)
 
 def spawn_laser():
-    color = "white" if gravityFlipped else "black"
+    fg = get_scheme()["invertFg"] if gravityFlipped else get_scheme()["fg"]
+    # safe zone is the middle quarter of the screen
+    safeTop = height * 0.35
+    safeBottom = height * 0.65
     if checkpoint >= 1 and random.random() < 0.4:
         x = random.uniform(pWidth * 2, width - pWidth * 2)
-        warning = canvas.create_rectangle(x - 2, ceiling, x + 2, ground, fill=color, stipple="gray50")
-        beam = canvas.create_rectangle(x - 8, ceiling, x + 8, ground, fill=color, state="hidden")
+        warning = canvas.create_rectangle(x - 2, ceiling, x + 2, ground, fill=fg, stipple="gray50")
+        beam = canvas.create_rectangle(x - 8, ceiling, x + 8, ground, fill=fg, state="hidden")
         lasers.append({"warning": warning, "beam": beam, "x": x, "type": "vertical", "timer": 0})
     else:
-        y = random.uniform(ceiling + pHeight * 2, ground - pHeight * 2)
-        warning = canvas.create_rectangle(0, y - 2, width, y + 2, fill=color, stipple="gray50")
-        beam = canvas.create_rectangle(0, y - 8, width, y + 8, fill=color, state="hidden")
+        # pick a y position outside the safe zone
+        if random.random() < 0.5:
+            y = random.uniform(ceiling + pHeight * 2, safeTop)
+        else:
+            y = random.uniform(safeBottom, ground - pHeight * 2)
+        warning = canvas.create_rectangle(0, y - 2, width, y + 2, fill=fg, stipple="gray50")
+        beam = canvas.create_rectangle(0, y - 8, width, y + 8, fill=fg, state="hidden")
         lasers.append({"warning": warning, "beam": beam, "y": y, "type": "horizontal", "timer": 0})
 
 def update_lasers():
@@ -162,27 +175,30 @@ def update_lasers():
     return False
 
 def update_progress():
-    global progress, checkpoint, laserSpawnInterval, laserWarningDuration, maxSimultaneousLasers, shakeFrames
+    global progress, checkpoint, laserSpawnInterval, laserWarningDuration, maxSimultaneousLasers, shakeFrames, progressMax
     if checkpoint >= maxCheckpoints:
         return
     progress += 1
     if progress >= progressMax:
         progress = 0
         checkpoint += 1
+        progressMax = int(progressMax * 1.5)
         laserSpawnInterval = max(40, laserSpawnInterval - 10)
         laserWarningDuration = max(20, laserWarningDuration - 12)
         maxSimultaneousLasers = min(3, maxSimultaneousLasers + 1)
         shakeFrames = 20
+        apply_color_scheme(get_scheme(), flipped=gravityFlipped)
     barWidth = (progress / progressMax) * width
-    canvas.coords(progressBar, 0, ceiling, barWidth, ceiling + height * 0.02)
+    canvas.coords(progressBar, 0, 0, barWidth, height * 0.01)
 
 def show_game_over():
     canvas.itemconfig(player, state="hidden")
     for laser in lasers:
         canvas.itemconfig(laser["warning"], state="hidden")
         canvas.itemconfig(laser["beam"], state="hidden")
-    color = "white" if gravityFlipped else "black"
-    bg = "black" if gravityFlipped else "white"
+    scheme = get_scheme()
+    color = scheme["invertFg"] if gravityFlipped else scheme["fg"]
+    bg = scheme["invertBg"] if gravityFlipped else scheme["bg"]
     title = canvas.create_text(width//2, height//3, text="Skill: Lacking", font=("Arial", width//15, "bold"), fill=color)
     restart_button = tk.Button(root, text="RESTART", font=("Arial", width//40, "bold"), bg=color, fg=bg, cursor="hand2",
         command=lambda: restart_game([title, restart_button_window]))
@@ -191,7 +207,7 @@ def show_game_over():
 def restart_game(elements):
     global pX, pY, velocityY, isGrounded, gravityFlipped, lasers, laserSpawnTimer, gameOver
     global progress, checkpoint, laserSpawnInterval, laserWarningDuration, maxSimultaneousLasers
-    global dashing, dashFrames, dashCooldown
+    global dashing, dashFrames, dashCooldown, slamming, progressMax
     for element in elements:
         canvas.delete(element)
     for laser in lasers:
@@ -201,6 +217,7 @@ def restart_game(elements):
     laserSpawnTimer = 0
     gameOver = False
     progress = 0
+    progressMax = 300
     checkpoint = 0
     laserSpawnInterval = 70
     laserWarningDuration = 60
@@ -210,13 +227,8 @@ def restart_game(elements):
     dashCooldown = 0
     slamming = False
     gravityFlipped = False
-    canvas.config(bg="white")
-    canvas.itemconfig(player, fill="black")
-    canvas.itemconfig(floor, fill="black")
-    canvas.itemconfig(roof, fill="black")
-    canvas.itemconfig(progressBar, fill="black")
-    canvas.itemconfig(progressBarBg, fill="gray")
-    canvas.coords(progressBar, 0, ceiling, 0, ceiling + height * 0.02)
+    apply_color_scheme(colorSchemes[0])
+    canvas.coords(progressBar, 0, 0, 0, height * 0.01)
     startX = width//2
     startY = ground - pHeight
     canvas.move(player, startX - pX, startY - pY)
@@ -226,7 +238,7 @@ def restart_game(elements):
     root.after(16, game_loop)
 
 def game_loop():
-    global pY, pX, velocityY, isGrounded, jumpBuffer, shakeFrames, laserSpawnTimer, gameOver, dashing, dashFrames, dashCooldown, slamming, slamGravity
+    global pY, pX, velocityY, isGrounded, jumpBuffer, shakeFrames, laserSpawnTimer, gameOver, dashing, dashFrames, dashCooldown, slamming
 
     dx, dy = 0, 0
 
@@ -235,14 +247,12 @@ def game_loop():
     if "d" in keys_held:
         dx += speed
 
-    # handle dash
     if dashing:
         if "a" in keys_held:
             dx -= dashSpeed
         elif "d" in keys_held:
             dx += dashSpeed
         else:
-            # dash in the last direction or right by default
             dx += dashSpeed
         dashFrames -= 1
         if dashFrames <= 0:
@@ -266,7 +276,7 @@ def game_loop():
             dy = ceiling - pY
             velocityY = 0
             isGrounded = True
-            slamming = False  # stop slamming when you land
+            slamming = False
         else:
             isGrounded = False
     else:
@@ -276,7 +286,7 @@ def game_loop():
             dy = ground - (pY + pHeight)
             velocityY = 0
             isGrounded = True
-            slamming = False  # stop slamming when you land
+            slamming = False
         else:
             isGrounded = False
 
@@ -336,7 +346,8 @@ def show_lore(menu_elements):
     line2 = canvas.create_text(width//2, height//2 - height//16, text="Press W to jump", font=("Arial", width//50), fill="black")
     line3 = canvas.create_text(width//2, height//2, text="Press SPACE to flip gravity and invert colors", font=("Arial", width//50), fill="black")
     line4 = canvas.create_text(width//2, height//2 + height//16, text="Press E to dash", font=("Arial", width//50), fill="black")
-    lore_elements = [title, line1, line2, line3, line4]
+    line5 = canvas.create_text(width//2, height//2 + height//8, text="Press S in the air to slam down", font=("Arial", width//50), fill="black")
+    lore_elements = [title, line1, line2, line3, line4, line5]
     back_button = tk.Button(root, text="Back", font=("Arial", width//40, "bold"), bg="black", fg="white", cursor="hand2",
         command=lambda: [back_button.destroy(), [canvas.delete(e) for e in lore_elements], show_menu()])
     canvas.create_window(width//10, height//1.2, window=back_button)
@@ -349,7 +360,8 @@ def show_controls(menu_elements):
     line22 = canvas.create_text(width//2, height//2 - height//16, text="Press W to jump", font=("Arial", width//50), fill="black")
     line33 = canvas.create_text(width//2, height//2, text="Press SPACE to flip gravity | This can be done midair", font=("Arial", width//50), fill="black")
     line44 = canvas.create_text(width//2, height//2 + height//16, text="Press E to dash", font=("Arial", width//50), fill="black")
-    controls_elements = [title1, line11, line22, line33, line44]
+    line55 = canvas.create_text(width//2, height//2 + height//8, text="Press S in the air to slam down", font=("Arial", width//50), fill="black")
+    controls_elements = [title1, line11, line22, line33, line44, line55]
     back_button = tk.Button(root, text="Back", font=("Arial", width//40, "bold"), bg="black", fg="white", cursor="hand2",
         command=lambda: [back_button.destroy(), [canvas.delete(e) for e in controls_elements], show_menu()])
     canvas.create_window(width*0.87, height//1.2, window=back_button)
