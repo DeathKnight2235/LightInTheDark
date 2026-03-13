@@ -208,6 +208,7 @@ def restart_game(elements):
     dashing = False
     dashFrames = 0
     dashCooldown = 0
+    slamming = False
     gravityFlipped = False
     canvas.config(bg="white")
     canvas.itemconfig(player, fill="black")
