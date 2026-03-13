@@ -61,7 +61,7 @@ dashFrames = 0
 dashFramesMax = 10
 dashSpeed = width//32
 dashCooldown = 0
-dashCooldownMax = 60
+dashCooldownMax = 10
 
 # slam variables
 slamming = False
