@@ -18,10 +18,22 @@ canvas.pack()
 
 # color schemes - one per checkpoint
 colorSchemes = [
-    {"bg": "white",  "fg": "black", "progressBg": "gray",    "invertBg": "black",  "invertFg": "white", "invertProgressBg": "gray25"},
-    {"bg": "black",  "fg": "white", "progressBg": "gray25",  "invertBg": "white",  "invertFg": "black", "invertProgressBg": "gray"},
-    {"bg": "navy",   "fg": "cyan",  "progressBg": "blue",    "invertBg": "cyan",   "invertFg": "navy",  "invertProgressBg": "teal"},
-    {"bg": "red",    "fg": "white", "progressBg": "darkred", "invertBg": "white",  "invertFg": "red",   "invertProgressBg": "pink"},
+    {"bg": "white",       "fg": "black",      "progressBg": "gray",      "invertBg": "black",      "invertFg": "white",      "invertProgressBg": "gray25"},
+    {"bg": "black",       "fg": "white",      "progressBg": "gray25",    "invertBg": "white",      "invertFg": "black",      "invertProgressBg": "gray"},
+    {"bg": "navy",        "fg": "cyan",       "progressBg": "blue",      "invertBg": "cyan",       "invertFg": "navy",       "invertProgressBg": "teal"},
+    {"bg": "red",         "fg": "white",      "progressBg": "darkred",   "invertBg": "white",      "invertFg": "red",        "invertProgressBg": "pink"},
+    {"bg": "#1a0033",     "fg": "#cc99ff",    "progressBg": "#6600cc",   "invertBg": "#cc99ff",    "invertFg": "#1a0033",    "invertProgressBg": "#9933ff"},
+    {"bg": "#003300",     "fg": "#00ff66",    "progressBg": "#005500",   "invertBg": "#00ff66",    "invertFg": "#003300",    "invertProgressBg": "#007722"},
+]
+
+# difficulty settings - one per checkpoint
+difficultySettings = [
+    {"spawnInterval": 70,  "warningDuration": 60, "maxLasers": 1},
+    {"spawnInterval": 60,  "warningDuration": 50, "maxLasers": 1},
+    {"spawnInterval": 50,  "warningDuration": 40, "maxLasers": 2},
+    {"spawnInterval": 40,  "warningDuration": 30, "maxLasers": 3},
+    {"spawnInterval": 30,  "warningDuration": 22, "maxLasers": 4},
+    {"spawnInterval": 20,  "warningDuration": 15, "maxLasers": 5},
 ]
 
 # player variables
@@ -58,17 +70,17 @@ slamGravity = 100
 # laser variables
 lasers = []
 laserSpawnTimer = 0
-laserSpawnInterval = 70
-laserWarningDuration = 60
+laserSpawnInterval = difficultySettings[0]["spawnInterval"]
+laserWarningDuration = difficultySettings[0]["warningDuration"]
 laserBeamSize = 8
-maxSimultaneousLasers = 1
+maxSimultaneousLasers = difficultySettings[0]["maxLasers"]
 gameOver = False
 
 # progress / difficulty variables
 progress = 0
 progressMax = 300
 checkpoint = 0
-maxCheckpoints = 3
+maxCheckpoints = 5
 
 def create_rounded_rectangle(canvas, x1, y1, x2, y2, radius=25, **kwargs):
     points = [
@@ -182,10 +194,11 @@ def update_progress():
         progress = 0
         checkpoint += 1
         progressMax = int(progressMax * 1.5)
-        laserSpawnInterval = max(40, laserSpawnInterval - 10)
-        laserWarningDuration = max(20, laserWarningDuration - 12)
-        maxSimultaneousLasers = min(3, maxSimultaneousLasers + 1)
         shakeFrames = 20
+        settings = difficultySettings[min(checkpoint, len(difficultySettings) - 1)]
+        laserSpawnInterval = settings["spawnInterval"]
+        laserWarningDuration = settings["warningDuration"]
+        maxSimultaneousLasers = settings["maxLasers"]
         apply_color_scheme(get_scheme(), flipped=gravityFlipped)
     barWidth = (progress / progressMax) * width
     canvas.coords(progressBar, 0, 0, barWidth, height * 0.01)
@@ -218,9 +231,9 @@ def restart_game(elements):
     progress = 0
     progressMax = 300
     checkpoint = 0
-    laserSpawnInterval = 70
-    laserWarningDuration = 60
-    maxSimultaneousLasers = 1
+    laserSpawnInterval = difficultySettings[0]["spawnInterval"]
+    laserWarningDuration = difficultySettings[0]["warningDuration"]
+    maxSimultaneousLasers = difficultySettings[0]["maxLasers"]
     dashing = False
     dashFrames = 0
     dashCooldown = 0
