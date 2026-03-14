@@ -61,7 +61,7 @@ dashFrames = 0
 dashFramesMax = 10
 dashSpeed = width//32
 dashCooldown = 0
-dashCooldownMax = 60
+dashCooldownMax = 10
 
 # slam variables
 slamming = False
@@ -142,7 +142,7 @@ def key_press(event):
     keys_held.add(event.keysym)
     if event.keysym == "w":
         jumpBuffer = jumpBufferMax
-    if event.keysym == "e" and dashCooldown == 0 and not dashing:
+    if event.keysym == "Shift_L" and dashCooldown == 0 and not dashing:
         dashing = True
         dashFrames = dashFramesMax
     if event.keysym == "s" and not isGrounded and not slamming:
