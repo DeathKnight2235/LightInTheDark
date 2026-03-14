@@ -28,12 +28,12 @@ colorSchemes = [
 
 # difficulty settings - one per checkpoint
 difficultySettings = [
-    {"spawnInterval": 70,  "warningDuration": 60, "maxLasers": 1},
-    {"spawnInterval": 60,  "warningDuration": 50, "maxLasers": 1},
-    {"spawnInterval": 50,  "warningDuration": 40, "maxLasers": 2},
-    {"spawnInterval": 40,  "warningDuration": 30, "maxLasers": 3},
-    {"spawnInterval": 30,  "warningDuration": 22, "maxLasers": 4},
-    {"spawnInterval": 20,  "warningDuration": 15, "maxLasers": 5},
+    {"spawnInterval": 70,  "warningDuration": 60, "maxLasers": 1, "surfaceInterval": 600},
+    {"spawnInterval": 60,  "warningDuration": 50, "maxLasers": 1, "surfaceInterval": 540},
+    {"spawnInterval": 50,  "warningDuration": 40, "maxLasers": 2, "surfaceInterval": 480},
+    {"spawnInterval": 40,  "warningDuration": 30, "maxLasers": 2, "surfaceInterval": 420},
+    {"spawnInterval": 30,  "warningDuration": 22, "maxLasers": 3, "surfaceInterval": 360},
+    {"spawnInterval": 20,  "warningDuration": 15, "maxLasers": 3, "surfaceInterval": 300},
 ]
 
 # player variables
@@ -61,7 +61,8 @@ dashFrames = 0
 dashFramesMax = 10
 dashSpeed = width//32
 dashCooldown = 0
-dashCooldownMax = 10
+dashCooldownMax = 60
+
 # slam variables
 slamming = False
 slamGravity = 100
@@ -80,6 +81,17 @@ progress = 0
 progressMax = 300
 checkpoint = 0
 maxCheckpoints = 5
+
+# surface shake variables
+surfaceTimer = 0
+surfaceInterval = difficultySettings[0]["surfaceInterval"]
+surfaceShaking = False
+surfaceShakeFrames = 0
+surfaceShakeMax = 180
+surfaceGone = False
+surfaceGraceFrames = 0
+surfaceGraceMax = 15
+surfaceFloorGone = False
 
 def create_rounded_rectangle(canvas, x1, y1, x2, y2, radius=25, **kwargs):
     points = [
@@ -130,7 +142,7 @@ def key_press(event):
     keys_held.add(event.keysym)
     if event.keysym == "w":
         jumpBuffer = jumpBufferMax
-    if event.keysym == "Shift_L" and dashCooldown == 0 and not dashing:
+    if event.keysym == "e" and dashCooldown == 0 and not dashing:
         dashing = True
         dashFrames = dashFramesMax
     if event.keysym == "s" and not isGrounded and not slamming:
@@ -184,8 +196,58 @@ def update_lasers():
             lasers.remove(laser)
     return False
 
+def update_surface():
+    global surfaceTimer, surfaceShaking, surfaceShakeFrames, surfaceGone
+    global surfaceGraceFrames, surfaceFloorGone, surfaceInterval
+
+    surfaceTimer += 1
+
+    # trigger shake when timer hits interval
+    if surfaceTimer >= surfaceInterval and not surfaceShaking and not surfaceGone:
+        surfaceShaking = True
+        surfaceShakeFrames = surfaceShakeMax
+        surfaceFloorGone = not gravityFlipped
+
+    # shake the surface every frame - this must be its own block, not nested above
+    if surfaceShaking:
+        offsetX = random.randint(-4, 4)
+        intensity = int(4 + (1 - surfaceShakeFrames / surfaceShakeMax) * 20)
+        offsetY = random.randint(-intensity, intensity)
+        if surfaceFloorGone:
+            canvas.coords(floor, offsetX, ground + offsetY, width + offsetX, height + offsetY)
+        else:
+            canvas.coords(roof, offsetX, offsetY, width + offsetX, ceiling + offsetY)
+        surfaceShakeFrames -= 1
+        if surfaceShakeFrames <= 0:
+            surfaceShaking = False
+            surfaceGone = True
+            surfaceTimer = 0
+            surfaceGraceFrames = surfaceGraceMax
+            if surfaceFloorGone:
+                canvas.itemconfig(floor, state="hidden")
+            else:
+                canvas.itemconfig(roof, state="hidden")
+
+    # count down grace period
+    if surfaceGone:
+        surfaceGraceFrames -= 1
+        if surfaceGraceFrames <= 0:
+            if surfaceFloorGone and isGrounded and not gravityFlipped:
+                return True
+            if not surfaceFloorGone and isGrounded and gravityFlipped:
+                return True
+            surfaceGone = False
+            if surfaceFloorGone:
+                canvas.itemconfig(floor, state="normal")
+                canvas.coords(floor, 0, ground, width, height)
+            else:
+                canvas.itemconfig(roof, state="normal")
+                canvas.coords(roof, 0, 0, width, ceiling)
+
+    return False
+
 def update_progress():
-    global progress, checkpoint, laserSpawnInterval, laserWarningDuration, maxSimultaneousLasers, shakeFrames, progressMax
+    global progress, checkpoint, laserSpawnInterval, laserWarningDuration, maxSimultaneousLasers, shakeFrames, progressMax, surfaceInterval
     if checkpoint >= maxCheckpoints:
         return
     progress += 1
@@ -198,6 +260,7 @@ def update_progress():
         laserSpawnInterval = settings["spawnInterval"]
         laserWarningDuration = settings["warningDuration"]
         maxSimultaneousLasers = settings["maxLasers"]
+        surfaceInterval = settings["surfaceInterval"]
         apply_color_scheme(get_scheme(), flipped=gravityFlipped)
     barWidth = (progress / progressMax) * width
     canvas.coords(progressBar, 0, 0, barWidth, height * 0.01)
@@ -219,6 +282,7 @@ def restart_game(elements):
     global pX, pY, velocityY, isGrounded, gravityFlipped, lasers, laserSpawnTimer, gameOver
     global progress, checkpoint, laserSpawnInterval, laserWarningDuration, maxSimultaneousLasers
     global dashing, dashFrames, dashCooldown, slamming, progressMax
+    global surfaceTimer, surfaceShaking, surfaceShakeFrames, surfaceGone, surfaceGraceFrames, surfaceFloorGone, surfaceInterval
     for element in elements:
         canvas.delete(element)
     for laser in lasers:
@@ -233,11 +297,22 @@ def restart_game(elements):
     laserSpawnInterval = difficultySettings[0]["spawnInterval"]
     laserWarningDuration = difficultySettings[0]["warningDuration"]
     maxSimultaneousLasers = difficultySettings[0]["maxLasers"]
+    surfaceInterval = difficultySettings[0]["surfaceInterval"]
     dashing = False
     dashFrames = 0
     dashCooldown = 0
     slamming = False
     gravityFlipped = False
+    surfaceTimer = 0
+    surfaceShaking = False
+    surfaceShakeFrames = 0
+    surfaceGone = False
+    surfaceGraceFrames = 0
+    surfaceFloorGone = False
+    canvas.itemconfig(floor, state="normal")
+    canvas.itemconfig(roof, state="normal")
+    canvas.coords(floor, 0, ground, width, height)
+    canvas.coords(roof, 0, 0, width, ceiling)
     apply_color_scheme(colorSchemes[0])
     canvas.coords(progressBar, 0, 0, 0, height * 0.01)
     startX = width//2
@@ -327,6 +402,10 @@ def game_loop():
         laserSpawnTimer = 0
 
     if update_lasers():
+        show_game_over()
+        return
+
+    if update_surface():
         show_game_over()
         return
 
